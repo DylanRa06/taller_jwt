@@ -1,6 +1,7 @@
 package com.krakedev.taller_jwt;
 
 import java.util.Date;
+import java.util.UUID;
 import com.auth0.jwt.JWT;
 import com.auth0.jwt.JWTVerifier;
 import com.auth0.jwt.algorithms.Algorithm;
@@ -23,6 +24,7 @@ public class JwtUtil {
         return JWT.create()
                 .withIssuer(EMISOR)
                 .withSubject(username)
+                .withJWTId(UUID.randomUUID().toString())
                 .withIssuedAt(new Date(tiempoActual))
                 .withExpiresAt(fechaExpiracion)
                 .withClaim("rol", rol)

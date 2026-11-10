@@ -36,8 +36,13 @@ class TallerJwtApplicationTests {
     }
 
     private HttpResponse<String> perfil(String auth) throws Exception {
+        return peticionProtegida("GET", "/auth/perfil", auth);
+    }
+
+    private HttpResponse<String> peticionProtegida(String metodo, String ruta, String auth) throws Exception {
         HttpRequest.Builder request = HttpRequest.newBuilder(
-                URI.create("http://localhost:" + port + "/auth/perfil")).GET();
+                URI.create("http://localhost:" + port + ruta))
+                .method(metodo, HttpRequest.BodyPublishers.noBody());
         if (auth != null) {
             request.header("Authorization", auth);
         }
@@ -63,6 +68,7 @@ class TallerJwtApplicationTests {
         HttpResponse<String> respuesta = perfil("Bearer " + token);
         assertEquals(200, respuesta.statusCode());
         assertEquals("dylan_test", mapper.readTree(respuesta.body()).get("Usuario").asString());
+        assertEquals("ROLE_ADMIN", mapper.readTree(respuesta.body()).get("rol_detectado").asString());
         assertEquals(401, post("/auth/login",
                 "{\"username\":\"dylan_test\",\"password\":\"incorrecta\"}").statusCode());
     }
@@ -102,5 +108,55 @@ class TallerJwtApplicationTests {
                 .withClaim("rol", "ADMIN").withExpiresAt(new Date(System.currentTimeMillis() + 60000))
                 .sign(algoritmo);
         assertEquals(401, perfil("Bearer " + otroEmisor).statusCode());
+    }
+    @Test
+    void permitirDashboardSoloAlAdministrador() throws Exception {
+        String admin = registrarYObtenerToken("admin_dashboard", "ADMIN");
+        String usuario = registrarYObtenerToken("usuario_dashboard", "USER");
+
+        assertEquals(401, peticionProtegida("GET", "/auth/dashboard", null).statusCode());
+        var perfilUsuario = perfil("Bearer " + usuario);
+        assertEquals(200, perfilUsuario.statusCode());
+        assertEquals("ROLE_USER", mapper.readTree(perfilUsuario.body()).get("rol_detectado").asString());
+        assertEquals(403, peticionProtegida("GET", "/auth/dashboard", "Bearer " + usuario).statusCode());
+
+        var panel = peticionProtegida("GET", "/auth/dashboard", "Bearer " + admin);
+        assertEquals(200, panel.statusCode());
+        assertEquals("admin_dashboard", mapper.readTree(panel.body()).get("admin").asString());
+    }
+
+    @Test
+    void cerrarSesionRevocaSoloElTokenPresentado() throws Exception {
+        String token = registrarYObtenerToken("admin_logout", "ADMIN");
+        String segundoToken = login("admin_logout");
+        assertNotEquals(token, segundoToken);
+        assertEquals(200, perfil("Bearer " + token).statusCode());
+        assertEquals(401, peticionProtegida("POST", "/auth/logout", null).statusCode());
+        assertEquals(401, peticionProtegida("POST", "/auth/logout", "Bearer token-invalido").statusCode());
+
+        var cierre = peticionProtegida("POST", "/auth/logout", "Bearer " + token);
+        assertEquals(200, cierre.statusCode());
+        var rechazado = perfil("Bearer " + token);
+        assertEquals(401, rechazado.statusCode());
+        assertEquals("Acceso denegado: Sesión cerrada", rechazado.body());
+        assertEquals(401, peticionProtegida("GET", "/auth/dashboard", "Bearer " + token).statusCode());
+        assertEquals(200, perfil("Bearer " + segundoToken).statusCode());
+        assertEquals(200, perfil("Bearer " + login("admin_logout")).statusCode());
+    }
+
+    private String registrarYObtenerToken(String username, String rol) throws Exception {
+        var registro = post("/auth/registrar", """
+                {"username":"%s","password":"ClavePrueba123","rol":"%s"}
+                """.formatted(username, rol));
+        assertEquals(201, registro.statusCode());
+        return login(username);
+    }
+
+    private String login(String username) throws Exception {
+        var login = post("/auth/login", """
+                {"username":"%s","password":"ClavePrueba123"}
+                """.formatted(username));
+        assertEquals(200, login.statusCode());
+        return mapper.readTree(login.body()).get("token").asString();
     }
 }

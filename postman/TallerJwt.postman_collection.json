@@ -1,8 +1,8 @@
 {
   "info": {
-    "name": "Taller JWT - Registro, login y perfil",
+    "name": "Taller JWT - Spring Security y roles",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Ejecutar las peticiones 1, 2 y 3 en orden. El login guarda el token automáticamente. Las peticiones 4 y 5 verifican el rechazo de accesos incorrectos. Si el usuario ya está registrado, continuar desde Login o cambiar username en las variables de la colección."
+    "description": "Registro, login, perfil, dashboard por rol y logout. Si el administrador ya existe, empieza en Login. Guarda el token revocado para probar el rechazo en el paso 11. La lista de revocación se guarda en memoria."
   },
   "variable": [
     {
@@ -19,6 +19,14 @@
     },
     {
       "key": "token",
+      "value": ""
+    },
+    {
+      "key": "usuarioNormal",
+      "value": "juan_taller"
+    },
+    {
+      "key": "tokenUsuario",
       "value": ""
     }
   ],
@@ -182,6 +190,200 @@
             "type": "text/javascript",
             "exec": [
               "pm.test(\"Credenciales rechazadas\", () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Dashboard con ADMIN",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/auth/dashboard",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{token}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Estado esperado 200\", () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Registrar usuario USER",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/auth/registrar",
+        "auth": {
+          "type": "noauth"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{usuarioNormal}}\",\n  \"password\": \"{{password}}\",\n  \"rol\": \"USER\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "description": "Si el usuario normal ya existe, pasa al paso 8."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Estado esperado 201\", () => pm.response.to.have.status(201));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Login del usuario USER",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/auth/login",
+        "auth": {
+          "type": "noauth"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{usuarioNormal}}\",\n  \"password\": \"{{password}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Estado esperado 200\", () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.unset(\"tokenUsuario\");",
+              "if (pm.response.code === 200) {",
+              "    pm.collectionVariables.set(\"tokenUsuario\", pm.response.json().token);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "9. Dashboard con USER",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/auth/dashboard",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{tokenUsuario}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Estado esperado 403\", () => pm.response.to.have.status(403));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10. Cerrar sesión del ADMIN",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{baseUrl}}/auth/logout",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{token}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Estado esperado 200\", () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11. Perfil con el token revocado",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/auth/perfil",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{token}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Estado esperado 401\", () => pm.response.to.have.status(401));",
+              "pm.test(\"Sesión cerrada\", () => pm.expect(pm.response.text()).to.include(\"Sesión cerrada\"));"
             ]
           }
         }
